@@ -146,6 +146,7 @@ impl Processor {
             let state_schedule = VestingSchedule {
                 release_time: s.release_time,
                 amount: s.amount,
+                released: s.released,
             };
             state_schedule.pack_into_slice(&mut data[offset..]);
             let delta = total_amount.checked_add(s.amount);
@@ -228,9 +229,9 @@ impl Processor {
         let mut schedules = unpack_schedules(&packed_state.borrow()[VestingScheduleHeader::LEN..])?;
 
         for s in schedules.iter_mut() {
-            if clock.unix_timestamp as u64 >= s.release_time {
+            if clock.unix_timestamp as u64 >= s.release_time && !s.released {
                 total_amount_to_transfer += s.amount;
-                s.amount = 0;
+                s.released = true;
             }
         }
         if total_amount_to_transfer == 0 {
@@ -258,7 +259,7 @@ impl Processor {
             &[&[&seeds]],
         )?;
 
-        // Reset released amounts to 0. This makes the simple unlock safe with complex scheduling contracts
+        // Mark schedules as released and save for later usage
         pack_schedules_into_slice(
             schedules,
             &mut packed_state.borrow_mut()[VestingScheduleHeader::LEN..],

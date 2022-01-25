@@ -52,9 +52,10 @@ pub struct Schedule {
     // Schedule release time in unix timestamp
     pub release_time: u64,
     pub amount: u64,
+    pub released: bool,
 }
 
-pub const SCHEDULE_SIZE: usize = 16;
+pub const SCHEDULE_SIZE: usize = 17;
 
 #[repr(C)]
 #[derive(Clone, Debug, PartialEq)]
@@ -163,10 +164,12 @@ impl VestingInstruction {
                         .and_then(|slice| slice.try_into().ok())
                         .map(u64::from_le_bytes)
                         .ok_or(InvalidInstruction)?;
+                    let released = rest[offset + 16] == 1;
                     offset += SCHEDULE_SIZE;
                     schedules.push(Schedule {
                         release_time,
                         amount,
+                        released,
                     })
                 }
                 Self::Create {
@@ -217,6 +220,7 @@ impl VestingInstruction {
                 for s in schedules.iter() {
                     buf.extend_from_slice(&s.release_time.to_le_bytes());
                     buf.extend_from_slice(&s.amount.to_le_bytes());
+                    buf.push(s.released as u8);
                 }
             }
             &Self::Unlock { seeds } => {
@@ -355,6 +359,7 @@ mod test {
             schedules: vec![Schedule {
                 amount: 42,
                 release_time: 250,
+                released: false,
             }],
             mint_address: mint_address.clone(),
             destination_token_address,

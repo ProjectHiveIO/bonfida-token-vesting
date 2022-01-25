@@ -9,6 +9,7 @@ use std::convert::TryInto;
 pub struct VestingSchedule {
     pub release_time: u64,
     pub amount: u64,
+    pub released: bool
 }
 
 #[derive(Debug, PartialEq)]
@@ -55,7 +56,7 @@ impl Pack for VestingScheduleHeader {
 impl Sealed for VestingSchedule {}
 
 impl Pack for VestingSchedule {
-    const LEN: usize = 16;
+    const LEN: usize = 17;
 
     fn pack_into_slice(&self, dst: &mut [u8]) {
         let release_time_bytes = self.release_time.to_le_bytes();
@@ -67,6 +68,8 @@ impl Pack for VestingSchedule {
         for i in 8..16 {
             dst[i] = amount_bytes[i - 8];
         }
+
+        dst[16] = self.released as u8;
     }
 
     fn unpack_from_slice(src: &[u8]) -> Result<Self, ProgramError> {
@@ -75,9 +78,11 @@ impl Pack for VestingSchedule {
         }
         let release_time = u64::from_le_bytes(src[0..8].try_into().unwrap());
         let amount = u64::from_le_bytes(src[8..16].try_into().unwrap());
+        let released = src[16] == 1;
         Ok(Self {
             release_time,
             amount,
+            released
         })
     }
 }
@@ -124,13 +129,15 @@ mod tests {
         let schedule_state_0 = VestingSchedule {
             release_time: 30767976,
             amount: 969,
+            released: false,
         };
         let schedule_state_1 = VestingSchedule {
             release_time: 32767076,
             amount: 420,
+            released: false,
         };
         let state_size = VestingScheduleHeader::LEN + 2 * VestingSchedule::LEN;
-        let mut state_array = [0u8; 97];
+        let mut state_array = [0u8; 99];
         header_state.pack_into_slice(&mut state_array[..VestingScheduleHeader::LEN]);
         schedule_state_0.pack_into_slice(
             &mut state_array
@@ -145,8 +152,10 @@ mod tests {
         expected.extend_from_slice(&[header_state.is_initialized as u8]);
         expected.extend_from_slice(&schedule_state_0.release_time.to_le_bytes());
         expected.extend_from_slice(&schedule_state_0.amount.to_le_bytes());
+        expected.push(schedule_state_0.released as u8);
         expected.extend_from_slice(&schedule_state_1.release_time.to_le_bytes());
         expected.extend_from_slice(&schedule_state_1.amount.to_le_bytes());
+        expected.push(schedule_state_1.released as u8);
 
         assert_eq!(expected, packed);
         assert_eq!(packed.len(), state_size);
